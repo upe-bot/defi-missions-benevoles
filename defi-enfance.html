@@ -775,7 +775,7 @@ function pageMission() {
       <!-- Video -->
       ${m.videoUrl?sectionCard(`
         <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;color:${C.dark};text-transform:uppercase;margin-bottom:10px">🎬 Vidéo tutoriel</div>
-        <div style="border-radius:12px;overflow:hidden;aspect-ratio:16/9"><iframe src="${m.videoUrl}" style="width:100%;height:100%;border:none" allowfullscreen></iframe></div>
+        <div style="border-radius:12px;overflow:hidden;aspect-ratio:16/9"><iframe src="${m.videoUrl}" style="width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
       `):""}
 
       <!-- Tabs -->
@@ -999,7 +999,7 @@ function renderModal() {
       ${field("Email *", `<input id="i-email" type="email" placeholder="votre@email.fr" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       ${field("Téléphone *", `<input id="i-tel" type="tel" placeholder="06 XX XX XX XX" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       <div id="i-err" style="display:none;color:${C.red};font-size:13px;margin-bottom:8px"></div>
-      ${btnPri("🎉 Confirmer l'inscription", `submitInscription('${data.mid}')`)}
+      ${`<div style="display:flex;gap:8px;margin-top:4px"><button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button></div>` + btnPri("🎉 Confirmer l'inscription",`submitInscription('${data.mid}')`,false,"margin-top:8px")}
     `);
   }
 
@@ -1013,7 +1013,7 @@ function renderModal() {
       )}
       <div id="c-custom-wrap" style="display:none;margin-top:8px"><input id="c-custom" type="text" placeholder="Prénom Nom" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/></div>
       ${field("Commentaire", `<textarea id="c-texte" rows="4" placeholder="Partagez votre retour…" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none;resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"></textarea>`)}
-      ${btnPri("Publier",`submitComment('${data.mid}')`)}
+      ${`<div style="display:flex;gap:8px;margin-top:4px"><button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button></div>` + btnPri("Publier",`submitComment('${data.mid}')`,false,"margin-top:8px")}
       <script>document.getElementById('c-auteur')?.addEventListener('change',function(){document.getElementById('c-custom-wrap').style.display=this.value==='__custom__'?'block':'none'});<\/script>
     `);
   }
@@ -1026,7 +1026,7 @@ function renderModal() {
       ${field("Description *", `<input id="t-texte" type="text" value="${(t?.texte||"").replace(/"/g,'&quot;')}" placeholder="Ex: Installer les tables" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       ${field("Date de réalisation", `<input id="t-date" type="date" value="${t?.date||today()}" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none"/>`)}
       ${field("Responsable", `<select id="t-resp" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none"><option value="">-- Non assigné --</option>${inscrits.map(i=>`<option value="${i.id}" ${t?.responsableId===i.id?"selected":""}>${i.prenom} ${i.nom}</option>`).join("")}</select>${inscrits.length===0?`<p style="font-size:11px;color:${C.gray};margin:5px 0 0">ℹ️ Inscrivez des bénévoles d'abord pour les assigner.</p>`:""}`)}
-      ${btnPri("💾 Enregistrer",`submitTache('${data.mid}',${data.tIdx!==null&&data.tIdx!==undefined?data.tIdx:"null"})`)}
+      ${`<div style="display:flex;gap:8px;margin-top:4px"><button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button></div>` + btnPri("💾 Enregistrer",`submitTache('${data.mid}',${data.tIdx!==null&&data.tIdx!==undefined?data.tIdx:"null"})`,false,"margin-top:8px")}
     `);
   }
 
@@ -1036,7 +1036,7 @@ function renderModal() {
     return modal(f?"✏️ Modifier la question":"➕ Nouvelle question FAQ",`
       ${field("Question *", `<input id="f-q" type="text" value="${(f?.question||"").replace(/"/g,'&quot;')}" placeholder="Ex: Que faire si…" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       ${field("Réponse *", `<textarea id="f-r" rows="4" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none;resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${f?.reponse||""}</textarea>`)}
-      ${btnPri("💾 Enregistrer",`submitFaq('${data.mid}',${data.fIdx!==null&&data.fIdx!==undefined?data.fIdx:"null"})`)}
+      ${`<div style="display:flex;gap:8px;margin-top:4px"><button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button></div>` + btnPri("💾 Enregistrer",`submitFaq('${data.mid}',${data.fIdx!==null&&data.fIdx!==undefined?data.fIdx:"null"})`,false,"margin-top:8px")}
     `);
   }
 
@@ -1046,7 +1046,7 @@ function renderModal() {
     return modal(l?"✏️ Modifier le lien":"➕ Ajouter un lien / outil",`
       ${field("Libellé *", `<input id="l-label" type="text" value="${(l?.label||"").replace(/"/g,'&quot;')}" placeholder="Ex: Liste des inscrits" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       ${field("URL *", `<input id="l-url" type="url" value="${(l?.url||"").replace(/"/g,'&quot;')}" placeholder="https://…" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
-      ${btnPri("💾 Enregistrer",`submitLien('${data.mid}',${data.lIdx!==null&&data.lIdx!==undefined?data.lIdx:"null"})`)}
+      ${`<div style="display:flex;gap:8px;margin-top:4px"><button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button></div>` + btnPri("💾 Enregistrer",`submitLien('${data.mid}',${data.lIdx!==null&&data.lIdx!==undefined?data.lIdx:"null"})`,false,"margin-top:8px")}
     `);
   }
 
