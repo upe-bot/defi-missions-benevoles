@@ -220,14 +220,24 @@ async function saveMission(data, isDraft=false, eid=null) {
 
 async function deleteMission(mid) {
   if (!confirm("Supprimer cette mission ?")) return;
-  await deleteDoc(missionDoc(state.currentEventId, mid));
+  const eid = await getMissionEid(mid);
+  await deleteDoc(missionDoc(eid, mid));
   showToast("🗑️ Mission supprimée.");
   state.page = "event";
   render();
 }
 
+async function getMissionEid(mid) {
+  // Find which event this mission belongs to
+  for (const [eid, missions] of Object.entries(state.allMissions)) {
+    if (missions.find(m => m.id === mid)) return eid;
+  }
+  return state.currentEventId; // fallback
+}
+
 async function updateMissionField(mid, field, value) {
-  await updateDoc(missionDoc(state.currentEventId, mid), { [field]: value });
+  const eid = await getMissionEid(mid);
+  await updateDoc(missionDoc(eid, mid), { [field]: value });
 }
 
 async function addInscrit(mid, data) {
@@ -362,6 +372,11 @@ async function saveUserMeta(uid, data) {
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const today = () => new Date().toISOString().split("T")[0];
 const nowStr = () => new Date().toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+const toEmbedUrl = (v) => {
+  if (!v) return "";
+  const yt = v.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return yt ? "https://www.youtube.com/embed/" + yt[1] : v;
+};
 const fmt = (d) => { if(!d) return ""; const [y,m,j]=d.split("-"); return `${j}/${m}/${y}`; };
 const fmtDate = (d) => { if(!d) return ""; return new Date(d).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}); };
 
@@ -775,7 +790,7 @@ function pageMission() {
       <!-- Video -->
       ${m.videoUrl?sectionCard(`
         <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;color:${C.dark};text-transform:uppercase;margin-bottom:10px">🎬 Vidéo tutoriel</div>
-        <div style="border-radius:12px;overflow:hidden;aspect-ratio:16/9"><iframe src="${m.videoUrl}" style="width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+        <div style="border-radius:12px;overflow:hidden;aspect-ratio:16/9"><iframe src="${toEmbedUrl(m.videoUrl)}" style="width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
       `):""}
 
       <!-- Tabs -->
@@ -1189,7 +1204,7 @@ function missionModalContent(mTab, m, brief, chef, eid) {
         `<div>${field("Brief équipe", `<input id="m-brief-h" type="time" value="${vBriefH}" style="${IS_SM}"/>`)}</div>` +
       `</div>` +
       field("Nb bénévoles", `<input id="m-nb" type="number" min="1" value="${vNb}" style="${IS}"/>`) +
-      field("Vidéo tuto (YouTube embed)", `<input id="m-video" type="url" value="${vVideo.replace(/"/g,"&quot;")}" placeholder="https://www.youtube.com/embed/…" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
+      field("Vidéo tuto (YouTube embed)", `<input id="m-video" type="url" value="${vVideo.replace(/"/g,"&quot;")}" placeholder="https://www.youtube.com/watch?v=… ou embed/…" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
       // Duplication supprimée - utiliser le bouton Dupliquer dans la liste admin
 
       `<div style="display:flex;gap:8px;margin-top:14px"><button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button><button onclick="submitMission('${m?.id||""}',state._missionEid,true)" style="flex:1;padding:12px;background:#fff;color:${C.gray};border:2px dashed #ccc;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">📝 Brouillon</button><button onclick="submitMission('${m?.id||""}',state._missionEid,false)" style="flex:2;padding:12px;background:linear-gradient(135deg,${C.magenta},${C.orangeVif});color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;cursor:pointer">💾 Enregistrer</button></div>`
@@ -1441,7 +1456,13 @@ window.submitMission = async (mid, eid, isDraft=false) => {
     finHeure: document.getElementById("m-fin")?.value || d.finHeure || existing?.finHeure || "",
     briefingHeure: document.getElementById("m-brief-h")?.value || d.briefingHeure || existing?.briefingHeure || "",
     nbBenevoles: parseInt(document.getElementById("m-nb")?.value) || d.nbBenevoles || existing?.nbBenevoles || 4,
-    videoUrl: document.getElementById("m-video")?.value?.trim() || d.videoUrl || existing?.videoUrl || "",
+    videoUrl: (() => {
+      let v = document.getElementById("m-video")?.value?.trim() || d.videoUrl || existing?.videoUrl || "";
+      // Auto-convert youtube.com/watch?v=ID to youtube.com/embed/ID
+      const yt = v.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (yt) v = "https://www.youtube.com/embed/" + yt[1];
+      return v;
+    })(),
     brief: {
       objectifs: document.getElementById("m-obj")?.value?.trim() || d.brief?.objectifs || existing?.brief?.objectifs || "",
       technique: document.getElementById("m-tech")?.value?.trim() || d.brief?.technique || existing?.brief?.technique || "",
