@@ -361,6 +361,23 @@ const today = () => new Date().toISOString().split("T")[0];
 const nowStr = () => new Date().toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
 const fmt = (d) => { if(!d) return ""; const [y,m,j]=d.split("-"); return `${j}/${m}/${y}`; };
 const fmtDate = (d) => { if(!d) return ""; return new Date(d).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}); };
+
+const missionDateLabel = (m) => {
+  const d1 = m.dateDebut || "";
+  const d2 = m.dateFin || "";
+  const h1 = m.rdvHeure || "";
+  const h2 = m.finHeure || "";
+  const noH = m.sansHoraire;
+  if (!d1) return h1 ? h1 + (h2 ? " → " + h2 : "") : "";
+  if (m.dateType === "plage" && d2 && d2 !== d1) {
+    const label = fmtDate(d1) + " → " + fmtDate(d2);
+    return noH ? label : (label + (h1 ? " · " + h1 + (h2 ? "–" + h2 : "") : ""));
+  }
+  const label = fmtDate(d1);
+  return noH ? label : (label + (h1 ? " · " + h1 + (h2 ? "–" + h2 : "") : ""));
+};
+
+const isMultiDay = (m) => m.dateType === "plage" && m.dateFin && m.dateFin !== m.dateDebut;
 const initials = (n) => (n||"?").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase();
 const pct = (taches) => { if(!taches?.length) return 0; return Math.round(taches.filter(t=>t.fait).length/taches.length*100); };
 
@@ -562,7 +579,8 @@ function pageEvent() {
             </div>
             <h4 style="margin:6px 0 5px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;color:${C.dark};line-height:1.3">${m.titre}</h4>
             <div style="font-size:11px;color:${C.gray};display:flex;flex-wrap:wrap;gap:8px;margin-bottom:5px">
-              <span>🕐 ${m.rdvHeure}–${m.finHeure}</span>
+              ${isMultiDay(m) ? `<span style="background:#8e44ad18;color:#8e44ad;font-weight:700;border-radius:6px;padding:2px 7px;font-size:10px">📅 Multi-jours</span>` : ""}
+              <span>${missionDateLabel(m) || (m.rdvHeure ? "🕐 " + m.rdvHeure + (m.finHeure ? "–" + m.finHeure : "") : "")}</span>
               <span>📍 ${(m.lieu||"").length>30?m.lieu.slice(0,30)+"…":m.lieu}</span>
               <span>👥 ${(m.inscrits||[]).length}/${m.nbBenevoles}</span>
             </div>
@@ -700,7 +718,7 @@ function pageMission() {
       <!-- Infos pratiques -->
       ${sectionCard(`
         <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;color:${C.dark};text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📋 Infos pratiques</div>
-        ${[["clock","RDV",`${m.rdvHeure} → ${m.finHeure}`],["clock","Brief équipe",m.briefingHeure?`${m.briefingHeure} — sur place`:"—"],["pin","Lieu",m.lieu],["users","Équipe",`${(m.inscrits||[]).length}/${m.nbBenevoles} inscrits`]].map(([ico,label,val])=>`
+        ${[["calendar","Date & horaire", missionDateLabel(m)||"—"],["clock","Brief équipe",m.briefingHeure?`${m.briefingHeure} — sur place`:"—"],["pin","Lieu",m.lieu],["users","Équipe",`${(m.inscrits||[]).length}/${m.nbBenevoles} inscrits`]].map(([ico,label,val])=>`
           <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:9px">
             <div style="background:${C.grayLight};border-radius:7px;padding:6px;flex-shrink:0">${icon(ico,14,C.magenta)}</div>
             <div><div style="font-size:10px;color:${C.gray};font-weight:700;text-transform:uppercase;letter-spacing:.4px">${label}</div><div style="font-size:13px;color:${C.dark};font-weight:600">${val}</div></div>
@@ -824,7 +842,8 @@ function pageAdmin() {
           </div>
           <h4 style="margin:5px 0;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:${C.dark}">${m.titre}</h4>
           <div style="font-size:11px;color:${C.gray};display:flex;gap:10px;flex-wrap:wrap">
-            <span>🕐 ${m.rdvHeure}–${m.finHeure}</span><span>👥 ${(m.inscrits||[]).length}/${m.nbBenevoles}</span><span>✅ ${(m.taches||[]).filter(t=>t.fait).length}/${(m.taches||[]).length}</span><span>❓ ${(m.faq||[]).length}</span>
+            ${isMultiDay(m) ? `<span style="background:#8e44ad18;color:#8e44ad;font-weight:700;border-radius:6px;padding:2px 7px;font-size:10px">📅 Multi-jours</span>` : ""}
+              <span>${missionDateLabel(m) || (m.rdvHeure ? "🕐 " + m.rdvHeure + (m.finHeure ? "–" + m.finHeure : "") : "")}</span><span>👥 ${(m.inscrits||[]).length}/${m.nbBenevoles}</span><span>✅ ${(m.taches||[]).filter(t=>t.fait).length}/${(m.taches||[]).length}</span><span>❓ ${(m.faq||[]).length}</span>
           </div>
           ${progressBar(m.taches)}
         </div>`).join("")}`;
@@ -1055,11 +1074,33 @@ function missionModalContent(mTab, m, brief, chef, eid) {
     ${field("Titre *", `<input id="m-titre" type="text" value="${(m?.titre||"").replace(/"/g,'&quot;')}" placeholder="Titre de la mission" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
     ${field("Catégorie", `<select id="m-cat" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none">${CATEGORIES.slice(1).map(c=>`<option ${m?.categorie===c?"selected":""}>${c}</option>`).join("")}</select>`)}
     ${field("Lieu *", `<input id="m-lieu" type="text" value="${(m?.lieu||"").replace(/"/g,'&quot;')}" placeholder="Adresse précise" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-      ${field("Heure RDV", `<input id="m-rdv" type="time" value="${m?.rdvHeure||"08:00"}" style="width:100%;padding:11px 8px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;outline:none"/>`)}
-      ${field("Heure fin", `<input id="m-fin" type="time" value="${m?.finHeure||"13:00"}" style="width:100%;padding:11px 8px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;outline:none"/>`)}
-      ${field("Brief équipe", `<input id="m-brief-h" type="time" value="${m?.briefingHeure||"07:45"}" style="width:100%;padding:11px 8px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;outline:none"/>`)}
+    ${field("Type de date", `<select id="m-datetype" onchange="toggleDateFields()" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-size:14px;outline:none"><option value="jour" ${(m?.dateType||"jour")==="jour"?"selected":""}>📅 Jour précis</option><option value="plage" ${m?.dateType==="plage"?"selected":""}>📅 Plage de dates</option></select>`)}
+    <div id="m-date-fields">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${field("Date début *", `<input id="m-date-debut" type="date" value="${m?.dateDebut||""}" style="width:100%;padding:11px 8px;border:2px solid #eee;border-radius:10px;font-size:13px;outline:none"/>`)}
+        <div id="m-datefin-wrap" style="display:${(m?.dateType==="plage")?"block":"none"}">
+          ${field("Date fin", `<input id="m-date-fin" type="date" value="${m?.dateFin||""}" style="width:100%;padding:11px 8px;border:2px solid #eee;border-radius:10px;font-size:13px;outline:none"/>`)}
+        </div>
+      </div>
+      <div id="m-horaire-wrap" style="display:${m?.sansHoraire?"none":"block"}">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          ${field("Heure RDV", `<input id="m-rdv" type="time" value="${m?.rdvHeure||""}" style="width:100%;padding:11px 8px;border:2px solid #eee;border-radius:10px;font-size:13px;outline:none"/>`)}
+          ${field("Heure fin", `<input id="m-fin" type="time" value="${m?.finHeure||""}" style="width:100%;padding:11px 8px;border:2px solid #eee;border-radius:10px;font-size:13px;outline:none"/>`)}
+          ${field("Brief équipe", `<input id="m-brief-h" type="time" value="${m?.briefingHeure||""}" style="width:100%;padding:11px 8px;border:2px solid #eee;border-radius:10px;font-size:13px;outline:none"/>`)}
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:${C.dark};cursor:pointer;margin-bottom:10px">
+        <input type="checkbox" id="m-sans-horaire" ${m?.sansHoraire?"checked":""} onchange="document.getElementById('m-horaire-wrap').style.display=this.checked?'none':'block'" style="width:16px;height:16px;cursor:pointer"/>
+        Sans horaire précis (mission sur toute la journée)
+      </label>
     </div>
+    <script>
+      function toggleDateFields() {
+        const t = document.getElementById("m-datetype")?.value;
+        const wrap = document.getElementById("m-datefin-wrap");
+        if(wrap) wrap.style.display = t==="plage" ? "block" : "none";
+      }
+    <\/script>
     ${field("Nb bénévoles", `<input id="m-nb" type="number" min="1" value="${m?.nbBenevoles||4}" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none"/>`)}
     ${field("Vidéo tuto (YouTube embed)", `<input id="m-video" type="url" value="${(m?.videoUrl||"").replace(/"/g,'&quot;')}" placeholder="https://www.youtube.com/embed/…" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
     ${btnPri("💾 Enregistrer",`submitMission('${m?.id||""}','${eid}')`,false,"margin-top:4px")}`;
@@ -1194,8 +1235,12 @@ window.submitMission = async (mid, eid) => {
     titre,
     categorie: document.getElementById("m-cat")?.value||"Accueil",
     lieu: document.getElementById("m-lieu")?.value?.trim()||"",
-    rdvHeure: document.getElementById("m-rdv")?.value||"08:00",
-    finHeure: document.getElementById("m-fin")?.value||"13:00",
+    dateType: document.getElementById("m-datetype")?.value||"jour",
+    dateDebut: document.getElementById("m-date-debut")?.value||"",
+    dateFin: document.getElementById("m-date-fin")?.value||"",
+    sansHoraire: document.getElementById("m-sans-horaire")?.checked||false,
+    rdvHeure: document.getElementById("m-rdv")?.value||"",
+    finHeure: document.getElementById("m-fin")?.value||"",
     briefingHeure: document.getElementById("m-brief-h")?.value||"",
     nbBenevoles: parseInt(document.getElementById("m-nb")?.value)||4,
     videoUrl: document.getElementById("m-video")?.value?.trim()||"",
