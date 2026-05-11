@@ -42,8 +42,9 @@ const auth = getAuth(firebase);
 
 // ── PALETTE ──────────────────────────────────────────────────────────────────
 const C = { magenta:"#fb0089", orangeVif:"#ef6135", orange:"#ff8533", dark:"#1a1a1a", gray:"#888", grayLight:"#f5f5f5", green:"#27ae60", red:"#e74c3c" };
-const CAT_COLORS = { Accueil:C.magenta, Sécurité:C.red, Ravitaillement:C.orange, Communication:"#8e44ad", Animation:C.orangeVif };
-const CATEGORIES = ["Toutes","Accueil","Sécurité","Ravitaillement","Communication","Animation"];
+const DEFAULT_CAT_COLORS = { Accueil:C.magenta, Sécurité:C.red, Ravitaillement:C.orange, Communication:"#8e44ad", Animation:C.orangeVif };
+let CAT_COLORS = { ...DEFAULT_CAT_COLORS };
+let CATEGORIES = ["Toutes","Accueil","Sécurité","Ravitaillement","Communication","Animation"];
 
 // ── USERS META (rôles stockés dans Firestore /users/{uid}) ───────────────────
 // Structure: { nom, email, role: superAdmin|admin, eventIds: [] }
@@ -160,7 +161,7 @@ onAuthStateChanged(auth, async (user) => {
     if (!state.userMeta) {
       // Premier superAdmin : v.vieilfault
       if (user.email === "v.vieilfault@unionpourlenfance.com") {
-        const meta = { nom:"Vincent Vieilfault", email:user.email, role:"superAdmin", eventIds:[] };
+        const meta = { nom:"Victor Vieilfault", email:user.email, role:"superAdmin", eventIds:[] };
         await setDoc(userDoc(user.uid), meta);
         state.userMeta = meta;
       } else {
@@ -810,6 +811,7 @@ function pageAdmin() {
       <button onclick="openModal('mission',{eid:'${state.currentEventId}'})" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,${C.orangeVif},${C.orange});color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:4px">
         ${icon("plus",17,"#fff")} Créer une nouvelle mission
       </button>
+      ${isSuperAdmin()?`<button onclick="openCategoriesModal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;background:#fff;border:2px dashed ${C.magenta};border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer;color:${C.magenta};margin-bottom:4px">${icon("edit",15,C.magenta)} Gérer les catégories</button>`:""} 
       ${state.missions.map(m=>`
         <div style="background:#fff;border-radius:16px;padding:15px;margin-bottom:11px;box-shadow:0 2px 12px rgba(0,0,0,.07)">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px">
@@ -1010,12 +1012,40 @@ function renderModal() {
 
   if (type==="user") {
     const u = data.uid ? data : {};
+    const parts = (u.nom||"").split(" ");
+    const uPrenom = parts[0]||""; const uNomF = parts.slice(1).join(" ")||"";
+    return modal(u.uid?"✏️ Modifier l'utilisateur":"➕ Nouvel utilisateur",`
+      ${field("Prénom *", `<input id="u-prenom" type="text" value="${uPrenom.replace(/"/g,'&quot;')}" placeholder="Prénom" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
+      ${field("Nom *", `<input id="u-nom" type="text" value="${uNomF.replace(/"/g,'&quot;')}" placeholder="Nom de famille" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
+      ${field("Email *", `<input id="u-email" type="email" value="${(u.email||"").replace(/"/g,'&quot;')}" placeholder="email@example.fr" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
+      ${field("Rôle", `<select id="u-role" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none"><option value="superAdmin" ${u.role==="superAdmin"?"selected":""}>👑 Super Administrateur</option><option value="admin" ${u.role==="admin"||!u.role?"selected":""}>⚙️ Administrateur</option></select>`)}
+      <p style="font-size:11px;color:${C.gray};margin-bottom:12px">⚠️ Pour modifier le mot de passe, utilisez la console Firebase Authentication.</p>
+      ${btnPri("💾 Enregistrer",`submitUser('${u.uid||""}')`)}
+    `);
+  }
+    const u = data.uid ? data : {};
     return modal(u.uid?"✏️ Modifier l'utilisateur":"➕ Nouvel utilisateur",`
       ${field("Nom complet *", `<input id="u-nom" type="text" value="${(u.nom||"").replace(/"/g,'&quot;')}" placeholder="Prénom Nom" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       ${field("Email *", `<input id="u-email" type="email" value="${(u.email||"").replace(/"/g,'&quot;')}" placeholder="email@example.fr" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       ${field("Rôle", `<select id="u-role" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none"><option value="superAdmin" ${u.role==="superAdmin"?"selected":""}>👑 Super Administrateur</option><option value="admin" ${u.role==="admin"||!u.role?"selected":""}>⚙️ Administrateur</option></select>`)}
       <p style="font-size:11px;color:${C.gray};margin-bottom:12px">⚠️ Pour modifier le mot de passe, utilisez la console Firebase Authentication.</p>
       ${btnPri("💾 Enregistrer",`submitUser('${u.uid||""}')`)}
+    `);
+  }
+
+  if (type==="categories") {
+    const cats = CATEGORIES.slice(1);
+    const rowsHtml = cats.map(c => `
+      <div class="cat-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input class="cat-name" type="text" value="${c}" style="flex:1;padding:10px 12px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;outline:none"/>
+        <input class="cat-color" type="color" value="${CAT_COLORS[c]||C.magenta}" style="width:42px;height:38px;border:2px solid #eee;border-radius:8px;cursor:pointer;padding:2px"/>
+        <button onclick="this.parentElement.remove()" style="background:#fff0f0;border:none;border-radius:8px;padding:6px 8px;cursor:pointer;font-size:18px;color:${C.red}">×</button>
+      </div>`).join("");
+    return modal("🏷️ Gérer les catégories", `
+      <p style="font-size:12px;color:${C.gray};margin-bottom:14px">Modifiez, supprimez ou ajoutez des catégories. La couleur s'applique aux badges.</p>
+      <div id="cat-rows">${rowsHtml}</div>
+      <button onclick="addCatRow()" style="display:flex;align-items:center;gap:6px;background:${C.grayLight};border:none;border-radius:10px;padding:9px 14px;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;color:${C.dark};margin-bottom:14px;width:100%;justify-content:center">+ Ajouter une catégorie</button>
+      ${btnPri("💾 Enregistrer les catégories","submitCategories()")}
     `);
   }
 
@@ -1209,18 +1239,67 @@ window.submitClone = async (sourceId) => {
 };
 
 window.submitUser = async (uid) => {
-  const nom=document.getElementById("u-nom")?.value?.trim()||"";
+  const prenom=document.getElementById("u-prenom")?.value?.trim()||"";
+  const nomF=document.getElementById("u-nom")?.value?.trim()||"";
+  const nom=(prenom+" "+nomF).trim();
   const email=document.getElementById("u-email")?.value?.trim()||"";
   const role=document.getElementById("u-role")?.value||"admin";
-  if(!nom||!email) return;
+  if(!prenom||!nomF||!email) return showToast("⚠️ Prénom, nom et email sont requis.");
   if(uid) await saveUserMeta(uid,{nom,email,role});
   else showToast("⚠️ Créez d'abord l'utilisateur dans Firebase Auth, puis revenez ici pour lui assigner un rôle.");
   closeModal();
 };
 
+// ── CATEGORIES MGMT ───────────────────────────────────────────────────────────
+const categoriesDoc = () => doc(db, "config", "categories");
+
+async function loadCategories() {
+  try {
+    const snap = await getDoc(categoriesDoc());
+    if (snap.exists()) {
+      const data = snap.data();
+      CATEGORIES = ["Toutes", ...data.list];
+      CAT_COLORS = { ...DEFAULT_CAT_COLORS, ...data.colors };
+    }
+  } catch(e) {}
+}
+
+async function saveCategories(list, colors) {
+  await setDoc(categoriesDoc(), { list, colors });
+  CATEGORIES = ["Toutes", ...list];
+  CAT_COLORS = { ...DEFAULT_CAT_COLORS, ...colors };
+  showToast("✅ Catégories mises à jour !"); closeModal(); render();
+}
+
+window.openCategoriesModal = () => openModal('categories', {});
+
+window.submitCategories = async () => {
+  const rows = document.querySelectorAll(".cat-row");
+  const list = []; const colors = {};
+  rows.forEach(row => {
+    const name = row.querySelector(".cat-name")?.value?.trim();
+    const color = row.querySelector(".cat-color")?.value;
+    if (name) { list.push(name); colors[name] = color || C.magenta; }
+  });
+  if (!list.length) return showToast("⚠️ Ajoutez au moins une catégorie.");
+  await saveCategories(list, colors);
+};
+
+window.addCatRow = () => {
+  const container = document.getElementById("cat-rows");
+  if (!container) return;
+  const div = document.createElement("div");
+  div.className = "cat-row";
+  div.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:8px";
+  div.innerHTML = `<input class="cat-name" type="text" placeholder="Nom de la catégorie" style="flex:1;padding:10px 12px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;outline:none"/><input class="cat-color" type="color" value="${C.magenta}" style="width:42px;height:38px;border:2px solid #eee;border-radius:8px;cursor:pointer;padding:2px"/><button onclick="this.parentElement.remove()" style="background:#fff0f0;border:none;border-radius:8px;padding:6px 8px;cursor:pointer;font-size:16px;color:${C.red}">×</button>`;
+  container.appendChild(div);
+};
+
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
   await initFirestore();
+  await loadCategories();
   await loadEvents();
   render();
 }
