@@ -109,6 +109,7 @@ let state = {
   toast: null,
   modal: null,           // { type, data }
   unsubMissions: null,
+  _missionDraft: {},     // temp storage for mission form fields across tabs
 };
 
 // ── FIRESTORE HELPERS ─────────────────────────────────────────────────────────
@@ -386,8 +387,16 @@ function showToast(msg) {
   render();
   setTimeout(() => { state.toast = null; render(); }, 3000);
 }
-function openModal(type, data={}) { state.modal = { type, data }; render(); }
-function closeModal() { state.modal = null; render(); }
+function openModal(type, data={}) {
+  if (type === "mission") {
+    // Reset draft and pre-populate from existing mission data
+    state._missionDraft = {};
+    state._modalMissionTab = "infos";
+  }
+  state.modal = { type, data };
+  render();
+}
+function closeModal() { state.modal = null; state._missionDraft = {}; state._modalMissionTab = "infos"; render(); }
 
 function navigate(page, opts={}) {
   state.page = page;
@@ -997,7 +1006,7 @@ function renderModal() {
     const mTab = state._modalMissionTab||"infos";
     return modal(m?"✏️ Modifier la mission":"➕ Nouvelle mission",`
       <div style="display:flex;gap:6px;margin-bottom:16px">
-        ${[["infos","Infos"],["brief","Brief"],["chef","Chef"]].map(([k,l])=>`<button onclick="state._modalMissionTab='${k}';renderModalOnly()" style="padding:6px 14px;border-radius:99px;border:2px solid ${mTab===k?C.magenta:"#eee"};background:${mTab===k?C.magenta:"#fff"};color:${mTab===k?"#fff":C.dark};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer">${l}</button>`).join("")}
+        ${[["infos","Infos"],["brief","Brief"],["chef","Chef"]].map(([k,l])=>`<button onclick="switchMissionTab('${k}')" style="padding:6px 14px;border-radius:99px;border:2px solid ${mTab===k?C.magenta:"#eee"};background:${mTab===k?C.magenta:"#fff"};color:${mTab===k?"#fff":C.dark};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer">${l}</button>`).join("")}
       </div>
       <div id="modal-mission-content">
         ${missionModalContent(mTab, m, brief, chef, eid)}
@@ -1077,14 +1086,25 @@ function missionModalContent(mTab, m, brief, chef, eid) {
 
   if (mTab==="infos") {
     const isNew = !m?.id;
-    const dateType = m?.dateType || "jour";
-    const sansH = m?.sansHoraire || false;
-    const otherEvents = state.events.filter(e => e.id !== eid);
+    // Merge draft (typed values) over saved data
+    const d = state._missionDraft;
+    const dateType = d.dateType ?? m?.dateType ?? "jour";
+    const sansH = d.sansHoraire ?? m?.sansHoraire ?? false;
+    const vTitre = d.titre ?? m?.titre ?? "";
+    const vCat   = d.categorie ?? m?.categorie ?? "";
+    const vLieu  = d.lieu ?? m?.lieu ?? "";
+    const vDateD = d.dateDebut ?? m?.dateDebut ?? "";
+    const vDateF = d.dateFin ?? m?.dateFin ?? "";
+    const vRdv   = d.rdvHeure ?? m?.rdvHeure ?? "";
+    const vFin   = d.finHeure ?? m?.finHeure ?? "";
+    const vBriefH= d.briefingHeure ?? m?.briefingHeure ?? "";
+    const vNb    = d.nbBenevoles ?? m?.nbBenevoles ?? 4;
+    const vVideo = d.videoUrl ?? m?.videoUrl ?? "";
 
     return (
-      field("Titre *", `<input id="m-titre" type="text" value="${(m?.titre||"").replace(/"/g,"&quot;")}" placeholder="Titre de la mission" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
-      field("Catégorie", `<select id="m-cat" style="${IS}">${CATEGORIES.slice(1).map(c=>`<option ${m?.categorie===c?"selected":""}>${c}</option>`).join("")}</select>`) +
-      field("Lieu *", `<input id="m-lieu" type="text" value="${(m?.lieu||"").replace(/"/g,"&quot;")}" placeholder="Adresse précise" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
+      field("Titre *", `<input id="m-titre" type="text" value="${vTitre.replace(/"/g,"&quot;")}" placeholder="Titre de la mission" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
+      field("Catégorie", `<select id="m-cat" style="${IS}">${CATEGORIES.slice(1).map(c=>`<option ${vCat===c?"selected":""}>${c}</option>`).join("")}</select>`) +
+      field("Lieu *", `<input id="m-lieu" type="text" value="${vLieu.replace(/"/g,"&quot;")}" placeholder="Adresse précise" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
       `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:13px">` +
         `<div><label style="display:block;font-size:11px;font-weight:700;color:${C.dark};margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Type de date</label>` +
         `<select id="m-datetype" onchange="toggleMissionDateFields()" style="${IS}">` +
@@ -1092,22 +1112,22 @@ function missionModalContent(mTab, m, brief, chef, eid) {
         `<option value="plage" ${dateType==="plage"?"selected":""}>Plage de dates</option>` +
         `</select></div>` +
         `<div><label style="display:block;font-size:11px;font-weight:700;color:${C.dark};margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Date de début *</label>` +
-        `<input id="m-date-debut" type="date" value="${m?.dateDebut||""}" style="${IS_SM}"/></div>` +
+        `<input id="m-date-debut" type="date" value="${vDateD}" style="${IS_SM}"/></div>` +
       `</div>` +
       `<div id="m-datefin-wrap" style="margin-bottom:13px;display:${dateType==="plage"?"block":"none"}">` +
-        field("Date de fin", `<input id="m-date-fin" type="date" value="${m?.dateFin||""}" style="${IS_SM}"/>`) +
+        field("Date de fin", `<input id="m-date-fin" type="date" value="${vDateF}" style="${IS_SM}"/>`) +
       `</div>` +
       `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:${C.dark};cursor:pointer;margin-bottom:13px">` +
         `<input type="checkbox" id="m-sans-horaire" ${sansH?"checked":""} onchange="toggleSansHoraire(this.checked)" style="width:16px;height:16px;cursor:pointer"/>` +
         ` Sans horaire précis (toute la journée)` +
       `</label>` +
       `<div id="m-horaire-wrap" style="display:${sansH?"none":"grid"};grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:13px">` +
-        `<div>${field("Heure RDV", `<input id="m-rdv" type="time" value="${m?.rdvHeure||""}" style="${IS_SM}"/>`)}</div>` +
-        `<div>${field("Heure fin", `<input id="m-fin" type="time" value="${m?.finHeure||""}" style="${IS_SM}"/>`)}</div>` +
-        `<div>${field("Brief équipe", `<input id="m-brief-h" type="time" value="${m?.briefingHeure||""}" style="${IS_SM}"/>`)}</div>` +
+        `<div>${field("Heure RDV", `<input id="m-rdv" type="time" value="${vRdv}" style="${IS_SM}"/>`)}</div>` +
+        `<div>${field("Heure fin", `<input id="m-fin" type="time" value="${vFin}" style="${IS_SM}"/>`)}</div>` +
+        `<div>${field("Brief équipe", `<input id="m-brief-h" type="time" value="${vBriefH}" style="${IS_SM}"/>`)}</div>` +
       `</div>` +
-      field("Nb bénévoles", `<input id="m-nb" type="number" min="1" value="${m?.nbBenevoles||4}" style="${IS}"/>`) +
-      field("Vidéo tuto (YouTube embed)", `<input id="m-video" type="url" value="${(m?.videoUrl||"").replace(/"/g,"&quot;")}" placeholder="https://www.youtube.com/embed/…" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
+      field("Nb bénévoles", `<input id="m-nb" type="number" min="1" value="${vNb}" style="${IS}"/>`) +
+      field("Vidéo tuto (YouTube embed)", `<input id="m-video" type="url" value="${vVideo.replace(/"/g,"&quot;")}" placeholder="https://www.youtube.com/embed/…" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
       (isNew && state.events && state.events.filter(e=>e.id!==eid).length > 0 ? (
         `<div style="background:${C.magenta}08;border:1px solid ${C.magenta}25;border-radius:12px;padding:13px;margin-bottom:13px">` +
         `<div style="font-size:11px;font-weight:700;color:${C.dark};text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">📋 Dupliquer aussi vers</div>` +
@@ -1125,20 +1145,33 @@ function missionModalContent(mTab, m, brief, chef, eid) {
     );
   }
 
-  if (mTab==="brief") return (
-    field("🎯 Objectifs & résultats attendus", `<textarea id="m-obj" rows="3" style="${IS};resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${brief.objectifs||""}</textarea>`) +
-    field("🛠️ Technique de travail", `<textarea id="m-tech" rows="3" style="${IS};resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${brief.technique||""}</textarea>`) +
-    field("🤝 Travailler avec les autres", `<textarea id="m-collab" rows="3" style="${IS};resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${brief.collaboration||""}</textarea>`) +
-    field("📊 Évaluation finale", `<textarea id="m-eval" rows="3" style="${IS};resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${brief.evaluation||""}</textarea>`) +
+  if (mTab==="brief") {
+    const d = state._missionDraft;
+    const vObj   = d.brief?.objectifs    ?? brief.objectifs    ?? "";
+    const vTech  = d.brief?.technique    ?? brief.technique    ?? "";
+    const vCollab= d.brief?.collaboration?? brief.collaboration?? "";
+    const vEval  = d.brief?.evaluation   ?? brief.evaluation   ?? "";
+    return (
+    field("🎯 Objectifs & résultats attendus", `<textarea id="m-obj" rows="3" style="${IS};resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${vObj}</textarea>`) +
+    field("🛠️ Technique de travail", `<textarea id="m-tech" rows="3" style="${IS};resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${vTech}</textarea>`) +
+    field("🤝 Travailler avec les autres", `<textarea id="m-collab" rows="3" style="${IS};resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${vCollab}</textarea>`) +
+    field("📊 Évaluation finale", `<textarea id="m-eval" rows="3" style="${IS};resize:vertical" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'">${vEval}</textarea>`) +
     btnPri("💾 Enregistrer", `submitMission('${m?.id||""}','${eid}')`, false, "margin-top:4px")
   );
+  }
 
-  if (mTab==="chef") return (
-    field("Nom complet", `<input id="m-chef-nom" type="text" value="${(chef.nom||"").replace(/"/g,"&quot;")}" placeholder="Prénom Nom" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
-    field("Email", `<input id="m-chef-email" type="email" value="${(chef.email||"").replace(/"/g,"&quot;")}" placeholder="chef@defienfance.fr" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
-    field("Téléphone", `<input id="m-chef-tel" type="tel" value="${(chef.tel||"").replace(/"/g,"&quot;")}" placeholder="06 XX XX XX XX" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
+  if (mTab==="chef") {
+    const d = state._missionDraft;
+    const vCNom  = d.chefMission?.nom   ?? chef.nom   ?? "";
+    const vCEmail= d.chefMission?.email ?? chef.email ?? "";
+    const vCTel  = d.chefMission?.tel   ?? chef.tel   ?? "";
+    return (
+    field("Nom complet", `<input id="m-chef-nom" type="text" value="${vCNom.replace(/"/g,"&quot;")}" placeholder="Prénom Nom" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
+    field("Email", `<input id="m-chef-email" type="email" value="${vCEmail.replace(/"/g,"&quot;")}" placeholder="chef@defienfance.fr" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
+    field("Téléphone", `<input id="m-chef-tel" type="tel" value="${vCTel.replace(/"/g,"&quot;")}" placeholder="06 XX XX XX XX" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
     btnPri("💾 Enregistrer", `submitMission('${m?.id||""}','${eid}')`, false, "margin-top:4px")
   );
+  }
   return "";
 }
 
@@ -1167,11 +1200,45 @@ function render() {
   }
 }
 
+// Save current mission form fields into draft before switching tabs
+function saveMissionDraftFromDOM() {
+  const d = state._missionDraft;
+  const g = (id) => document.getElementById(id)?.value ?? null;
+  const gc = (id) => document.getElementById(id)?.checked ?? null;
+  if (g("m-titre")    !== null) d.titre        = g("m-titre");
+  if (g("m-cat")      !== null) d.categorie    = g("m-cat");
+  if (g("m-lieu")     !== null) d.lieu         = g("m-lieu");
+  if (g("m-datetype") !== null) d.dateType     = g("m-datetype");
+  if (g("m-date-debut")!==null) d.dateDebut    = g("m-date-debut");
+  if (g("m-date-fin") !== null) d.dateFin      = g("m-date-fin");
+  if (gc("m-sans-horaire")!==null) d.sansHoraire = gc("m-sans-horaire");
+  if (g("m-rdv")      !== null) d.rdvHeure     = g("m-rdv");
+  if (g("m-fin")      !== null) d.finHeure     = g("m-fin");
+  if (g("m-brief-h")  !== null) d.briefingHeure= g("m-brief-h");
+  if (g("m-nb")       !== null) d.nbBenevoles  = parseInt(g("m-nb"))||4;
+  if (g("m-video")    !== null) d.videoUrl     = g("m-video");
+  if (g("m-obj")      !== null) d.brief = { ...d.brief, objectifs:   g("m-obj") };
+  if (g("m-tech")     !== null) d.brief = { ...d.brief, technique:   g("m-tech") };
+  if (g("m-collab")   !== null) d.brief = { ...d.brief, collaboration:g("m-collab") };
+  if (g("m-eval")     !== null) d.brief = { ...d.brief, evaluation:  g("m-eval") };
+  if (g("m-chef-nom") !== null) d.chefMission = { ...d.chefMission, nom:  g("m-chef-nom") };
+  if (g("m-chef-email")!==null) d.chefMission = { ...d.chefMission, email:g("m-chef-email") };
+  if (g("m-chef-tel") !== null) d.chefMission = { ...d.chefMission, tel:  g("m-chef-tel") };
+  // preserve dup checkboxes
+  const dups = [...document.querySelectorAll(".m-dup-event:checked")].map(x=>x.value);
+  if (dups.length > 0) d._dupEvents = dups;
+}
+
+function switchMissionTab(tab) {
+  saveMissionDraftFromDOM();
+  state._modalMissionTab = tab;
+  renderModalOnly();
+}
+
 function renderModalOnly() {
   const overlay = document.getElementById("modal-overlay");
   if (overlay) overlay.outerHTML = renderModal();
   else { const app=document.getElementById("app"); app.innerHTML+=renderModal(); }
-  // Re-render modal content only
   render();
 }
 
@@ -1196,6 +1263,7 @@ window.deleteFaq = deleteFaq;
 window.deleteLien = deleteLien;
 window.toggleTache = toggleTache;
 window.renderModalOnly = renderModalOnly;
+window.switchMissionTab = switchMissionTab;
 window.state = state;
 window.render = render;
 
