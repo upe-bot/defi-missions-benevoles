@@ -392,8 +392,8 @@ function openModal(type, data={}) {
   if (type === "mission") {
     state._missionDraft = {};
     state._modalMissionTab = "infos";
-    // Store eid reliably in state
-    state._missionEid = data.eid || state.currentEventId || "";
+    // Always use live state.currentEventId, never a frozen string
+    state._missionEid = state.currentEventId || data.eid || "";
   }
   state.modal = { type, data };
   render();
@@ -735,7 +735,7 @@ function pageMission() {
     <div style="background:${accentBg};padding:13px 15px 18px;position:sticky;top:0;z-index:100">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <button onclick="navigate('event',{eventId:'${state.currentEventId}'})" style="background:rgba(255,255,255,.2);border:none;border-radius:10px;padding:7px 12px;cursor:pointer;color:#fff;display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600">${icon("arrow",14,"#fff")} Missions</button>
-        ${isAdmin()?`<button onclick="openModal('mission',${JSON.stringify({...m,eid:state.currentEventId}).replace(/"/g,'&quot;')})" style="background:rgba(255,255,255,.2);border:none;border-radius:8px;padding:6px 10px;cursor:pointer;color:#fff;display:flex;gap:4px;align-items:center;font-size:11px;font-weight:600">${icon("edit",13,"#fff")} Modifier</button>`:""}
+        ${isAdmin()?`<button onclick="openMissionModal('${encodeURIComponent(JSON.stringify(m))}')" style="background:rgba(255,255,255,.2);border:none;border-radius:8px;padding:6px 10px;cursor:pointer;color:#fff;display:flex;gap:4px;align-items:center;font-size:11px;font-weight:600">${icon("edit",13,"#fff")} Modifier</button>`:""}
       </div>
       ${badge(m.categorie)}${m.statut==="brouillon"?`<span style="background:#f39c12;color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:99px;margin-left:6px">📝 BROUILLON</span>`:""}
       <h2 style="margin:7px 0 0;color:#fff;font-family:'Montserrat',sans-serif;font-weight:900;font-size:18px;line-height:1.3">${m.titre}</h2>
@@ -853,7 +853,7 @@ function pageAdmin() {
   let tabContent = "";
   if (tab==="missions") {
     tabContent = `
-      <button onclick="openModal('mission',{eid:'${state.currentEventId}'})" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,${C.orangeVif},${C.orange});color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:4px">
+      <button onclick="openMissionModal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,${C.orangeVif},${C.orange});color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:4px">
         ${icon("plus",17,"#fff")} Créer une nouvelle mission
       </button>
       ${isSuperAdmin()?`<button onclick="openCategoriesModal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;background:#fff;border:2px dashed ${C.magenta};border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer;color:${C.magenta};margin-bottom:4px">${icon("edit",15,C.magenta)} Gérer les catégories</button>`:""} 
@@ -863,7 +863,7 @@ function pageAdmin() {
             <div style="display:flex;gap:5px;align-items:center">${badge(m.categorie)}${m.statut==="brouillon"?`<span style="background:#f39c12;color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">BROUILLON</span>`:""}</div>
             <div style="display:flex;gap:5px">
               <button onclick="navigate('mission',{missionId:'${m.id}',eventId:'${state.currentEventId}'})" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("arrow",13,C.gray)}</button>
-              <button onclick="openModal('mission',${JSON.stringify({...m,eid:state.currentEventId}).replace(/"/g,'&quot;')})" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("edit",13,C.orangeVif)}</button>
+              <button onclick="openMissionModal('${encodeURIComponent(JSON.stringify(m))}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("edit",13,C.orangeVif)}</button>
               <button onclick="deleteMission('${m.id}')" style="background:#fff0f0;border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("trash",13,C.red)}</button>
             </div>
           </div>
@@ -1262,6 +1262,11 @@ function renderModalOnly() {
 
 // ── GLOBAL SUBMIT HANDLERS ────────────────────────────────────────────────────
 window.navigate = navigate;
+window.openMissionModal = (mJson) => {
+  const data = mJson ? JSON.parse(decodeURIComponent(mJson)) : {};
+  data.eid = state.currentEventId;
+  openModal('mission', data);
+};
 window.toggleMissionDateFields = () => {
   const t = document.getElementById("m-datetype")?.value;
   const w = document.getElementById("m-datefin-wrap");
