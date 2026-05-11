@@ -110,6 +110,8 @@ let state = {
   modal: null,           // { type, data }
   unsubMissions: null,
   _missionDraft: {},     // temp storage for mission form fields across tabs
+  allMissions: {},       // { eventId: [missions] } - all events
+  _adminEventFilter: 'all', // filter in global admin
 };
 
 // ── FIRESTORE HELPERS ─────────────────────────────────────────────────────────
@@ -141,11 +143,10 @@ async function loadEvents() {
 }
 
 function subscribeToMissions(eventId) {
-  if (state.unsubMissions) state.unsubMissions();
-  state.unsubMissions = onSnapshot(missionsCol(eventId), (snap) => {
-    state.missions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    render();
-  });
+  // Use cached allMissions if available, otherwise wait for subscribeAllMissions
+  if (state.allMissions[eventId]) {
+    state.missions = state.allMissions[eventId];
+  }
 }
 
 async function loadUserMeta(uid) {
@@ -845,60 +846,104 @@ function pageSearch() {
 
 // ── PAGE: ADMIN ───────────────────────────────────────────────────────────────
 function pageAdmin() {
-  const tab = state._adminTab||"missions";
-  const totalI = state.missions.reduce((s,m)=>s+(m.inscrits||[]).length,0);
-  const totalB = state.missions.reduce((s,m)=>s+(m.nbBenevoles||0),0);
-  const ev = currentEvent();
+  const tab = state._adminTab || "missions";
+  const evFilter = state._adminEventFilter || "all";
+
+  // Gather ALL missions from ALL events with their event info
+  const allM = [];
+  for (const ev of state.events) {
+    const missions = state.allMissions[ev.id] || [];
+    missions.forEach(m => allM.push({ ...m, _eid: ev.id, _ev: ev }));
+  }
+
+  // Filter by event
+  const filteredM = evFilter === "all" ? allM : allM.filter(m => m._eid === evFilter);
+
+  // Stats
+  const totalI = filteredM.reduce((s,m) => s + (m.inscrits||[]).length, 0);
+  const totalB = filteredM.reduce((s,m) => s + (m.nbBenevoles||0), 0);
+
+  const evBadge = (ev) => `<span style="background:${ev.couleur||C.magenta};color:#fff;font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;font-family:'Montserrat',sans-serif;white-space:nowrap">${ev.hashtag}</span>`;
 
   let tabContent = "";
-  if (tab==="missions") {
-    tabContent = `
-      <button onclick="openMissionModal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,${C.orangeVif},${C.orange});color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:4px">
+
+  if (tab === "missions") {
+    tabContent =
+      // Event filter pills
+      `<div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:4px 0 12px">` +
+      `<button onclick="state._adminEventFilter='all';render()" style="padding:5px 13px;border-radius:99px;border:2px solid ${evFilter==='all'?C.magenta:'#eee'};background:${evFilter==='all'?C.magenta:'#fff'};color:${evFilter==='all'?'#fff':C.dark};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">Tous les événements</button>` +
+      state.events.map(ev =>
+        `<button onclick="state._adminEventFilter='${ev.id}';render()" style="padding:5px 13px;border-radius:99px;border:2px solid ${evFilter===ev.id?(ev.couleur||C.magenta):'#eee'};background:${evFilter===ev.id?(ev.couleur||C.magenta):'#fff'};color:${evFilter===ev.id?'#fff':C.dark};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">${ev.hashtag}</button>`
+      ).join("") +
+      `</div>` +
+
+      // Create + categories buttons
+      `<button onclick="openMissionModalGlobal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,${C.orangeVif},${C.orange});color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:6px">
         ${icon("plus",17,"#fff")} Créer une nouvelle mission
-      </button>
-      ${isSuperAdmin()?`<button onclick="openCategoriesModal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;background:#fff;border:2px dashed ${C.magenta};border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer;color:${C.magenta};margin-bottom:4px">${icon("edit",15,C.magenta)} Gérer les catégories</button>`:""} 
-      ${state.missions.map(m=>`
-        <div style="background:#fff;border-radius:16px;padding:15px;margin-bottom:11px;box-shadow:0 2px 12px rgba(0,0,0,.07)">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px">
-            <div style="display:flex;gap:5px;align-items:center">${badge(m.categorie)}${m.statut==="brouillon"?`<span style="background:#f39c12;color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">BROUILLON</span>`:""}</div>
-            <div style="display:flex;gap:5px">
-              <button onclick="navigate('mission',{missionId:'${m.id}',eventId:'${state.currentEventId}'})" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("arrow",13,C.gray)}</button>
-              <button onclick="openMissionModal('${encodeURIComponent(JSON.stringify(m))}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("edit",13,C.orangeVif)}</button>
-              <button onclick="deleteMission('${m.id}')" style="background:#fff0f0;border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("trash",13,C.red)}</button>
+      </button>` +
+      (isSuperAdmin() ? `<button onclick="openCategoriesModal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;background:#fff;border:2px dashed ${C.magenta};border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer;color:${C.magenta};margin-bottom:6px">${icon("edit",15,C.magenta)} Gérer les catégories</button>` : "") +
+
+      // Mission list
+      (filteredM.length === 0 ?
+        `<div style="text-align:center;padding:40px;color:${C.gray}"><p style="font-size:36px">📋</p><p>Aucune mission${evFilter!=='all'?' pour cet événement':''}.</p></div>` :
+        filteredM.map(m => `
+          <div style="background:#fff;border-radius:16px;padding:15px;margin-bottom:11px;box-shadow:0 2px 12px rgba(0,0,0,.07)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+              <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+                ${evBadge(m._ev)}
+                ${badge(m.categorie)}
+                ${m.statut==="brouillon"?`<span style="background:#f39c12;color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">BROUILLON</span>`:""}
+              </div>
+              <div style="display:flex;gap:5px;flex-shrink:0">
+                <button onclick="navigateToMission('${m.id}','${m._eid}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("arrow",13,C.gray)}</button>
+                <button onclick="openMissionModalGlobal('${encodeURIComponent(JSON.stringify({...m,eid:m._eid}))}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("edit",13,C.orangeVif)}</button>
+                <button onclick="deleteMissionGlobal('${m.id}','${m._eid}')" style="background:#fff0f0;border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("trash",13,C.red)}</button>
+              </div>
             </div>
-          </div>
-          <h4 style="margin:5px 0;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:${C.dark}">${m.titre}</h4>
-          <div style="font-size:11px;color:${C.gray};display:flex;gap:10px;flex-wrap:wrap">
-            ${isMultiDay(m) ? `<span style="background:#8e44ad18;color:#8e44ad;font-weight:700;border-radius:6px;padding:2px 7px;font-size:10px">📅 Multi-jours</span>` : ""}
-              <span>${missionDateLabel(m) || (m.rdvHeure ? "🕐 " + m.rdvHeure + (m.finHeure ? "–" + m.finHeure : "") : "")}</span><span>👥 ${(m.inscrits||[]).length}/${m.nbBenevoles}</span><span>✅ ${(m.taches||[]).filter(t=>t.fait).length}/${(m.taches||[]).length}</span><span>❓ ${(m.faq||[]).length}</span>
-          </div>
-          ${progressBar(m.taches)}
-        </div>`).join("")}`;
+            <h4 style="margin:0 0 5px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:${C.dark}">${m.titre}</h4>
+            <div style="font-size:11px;color:${C.gray};display:flex;gap:8px;flex-wrap:wrap">
+              <span>${missionDateLabel(m)||"—"}</span>
+              <span>👥 ${(m.inscrits||[]).length}/${m.nbBenevoles}</span>
+              <span>✅ ${(m.taches||[]).filter(t=>t.fait).length}/${(m.taches||[]).length}</span>
+            </div>
+            ${progressBar(m.taches)}
+          </div>`).join("")
+      );
   }
-  if (tab==="inscrits") {
-    tabContent = `
-      <div style="background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;justify-content:space-between">
+
+  if (tab === "inscrits") {
+    tabContent =
+      `<div style="background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);display:flex;justify-content:space-between">
         <div><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:26px;color:${C.magenta}">${totalI}</div><div style="font-size:12px;color:${C.gray}">inscrits</div></div>
         <div style="text-align:right"><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:26px;color:${C.orangeVif}">${totalB-totalI}</div><div style="font-size:12px;color:${C.gray}">places restantes</div></div>
-      </div>
-      ${state.missions.filter(m=>(m.inscrits||[]).length>0).map(m=>`
-        <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 10px rgba(0,0,0,.06)">
-          <div style="display:flex;justify-content:space-between;margin-bottom:8px"><h4 style="margin:0;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:${C.dark}">${m.titre}</h4>${badge(m.categorie)}</div>
-          ${(m.inscrits||[]).map((p,i)=>`<div style="padding:7px 0;border-bottom:${i<m.inscrits.length-1?`1px solid #f0f0f0`:"none"}"><div style="font-weight:600;font-size:13px;color:${C.dark}">${p.prenom} ${p.nom}</div><div style="font-size:11px;color:${C.gray}">📧 ${p.email} · 📱 ${p.tel}</div></div>`).join("")}
-        </div>`).join("")}
-      ${state.missions.every(m=>(m.inscrits||[]).length===0)?`<div style="text-align:center;padding:40px;color:${C.gray}"><p style="font-size:36px">🏃</p><p>Pas encore d'inscrits.</p></div>`:""}`;
+      </div>` +
+      filteredM.filter(m => (m.inscrits||[]).length > 0).map(m =>
+        `<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 2px 10px rgba(0,0,0,.06)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h4 style="margin:0;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:${C.dark}">${m.titre}</h4>
+            <div style="display:flex;gap:4px">${evBadge(m._ev)}${badge(m.categorie)}</div>
+          </div>
+          ${(m.inscrits||[]).map((p,i) =>
+            `<div style="padding:7px 0;border-bottom:${i<m.inscrits.length-1?"1px solid #f0f0f0":"none"}">
+              <div style="font-weight:600;font-size:13px;color:${C.dark}">${p.prenom} ${p.nom}</div>
+              <div style="font-size:11px;color:${C.gray}">📧 ${p.email} · 📱 ${p.tel}</div>
+            </div>`).join("")}
+        </div>`).join("") +
+      (filteredM.every(m => (m.inscrits||[]).length === 0) ?
+        `<div style="text-align:center;padding:40px;color:${C.gray}"><p style="font-size:36px">🏃</p><p>Pas encore d'inscrits.</p></div>` : "");
   }
-  if (tab==="users" && isSuperAdmin()) {
+
+  if (tab === "users" && isSuperAdmin()) {
     tabContent = `<div id="users-list"><div class="spinner"></div></div>`;
     loadAllUsers().then(users => {
       const el = document.getElementById("users-list");
       if (!el) return;
-      el.innerHTML = `
-        <button onclick="openModal('user',{})" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,#6c3483,#8e44ad);color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:4px">
+      el.innerHTML =
+        `<button onclick="openModal('user',{})" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,#6c3483,#8e44ad);color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:4px">
           ${icon("plus",17,"#fff")} Ajouter un utilisateur
-        </button>
-        ${users.map(u=>`
-          <div style="background:#fff;border-radius:16px;padding:15px;margin-bottom:11px;box-shadow:0 2px 12px rgba(0,0,0,.07)">
+        </button>` +
+        users.map(u =>
+          `<div style="background:#fff;border-radius:16px;padding:15px;margin-bottom:11px;box-shadow:0 2px 12px rgba(0,0,0,.07)">
             <div style="display:flex;justify-content:space-between;align-items:center">
               <div style="display:flex;align-items:center;gap:10px">
                 <div style="width:40px;height:40px;border-radius:50%;background:${u.role==="superAdmin"?"linear-gradient(135deg,#6c3483,#8e44ad)":`linear-gradient(135deg,${C.magenta},${C.orangeVif})`};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:14px;flex-shrink:0">${initials(u.nom||u.email)}</div>
@@ -908,9 +953,9 @@ function pageAdmin() {
                   ${roleBadge(u.role)}
                 </div>
               </div>
-              <button onclick="openModal('user',${JSON.stringify(u).replace(/"/g,'&quot;')})" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("edit",13,C.orangeVif)}</button>
+              <button onclick="openModal('user',${JSON.stringify(u).replace(/"/g,"&quot;")})" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("edit",13,C.orangeVif)}</button>
             </div>
-          </div>`).join("")}`;
+          </div>`).join("");
     });
   }
 
@@ -918,11 +963,10 @@ function pageAdmin() {
     ? [["missions","📋 Missions"],["inscrits","👥 Inscrits"],["users","👑 Utilisateurs"]]
     : [["missions","📋 Missions"],["inscrits","👥 Inscrits"]];
 
-  return `
-    ${hdr(null,`
+  return hdr(null,`
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="color:#fff;font-family:'Montserrat',sans-serif;font-weight:900;font-size:17px">⚙️ Admin · ${ev?.hashtag||""}</div>
+          <div style="color:#fff;font-family:'Montserrat',sans-serif;font-weight:900;font-size:17px">⚙️ Administration</div>
           <div style="color:rgba(255,255,255,.75);font-size:11px">${state.userMeta?.nom} · ${state.userMeta?.role==="superAdmin"?"Super Admin":"Admin"}</div>
         </div>
         <button onclick="doLogout()" style="background:rgba(255,255,255,.2);border:none;border-radius:10px;padding:7px 10px;cursor:pointer">${icon("logout",16,"#fff")}</button>
@@ -930,9 +974,9 @@ function pageAdmin() {
       <div style="display:flex;gap:7px;margin-top:12px;overflow-x:auto;scrollbar-width:none">
         ${adminTabs.map(([k,l])=>`<button onclick="state._adminTab='${k}';render()" style="padding:6px 14px;border-radius:99px;border:2px solid ${tab===k?"#fff":"rgba(255,255,255,.35)"};background:${tab===k?"#fff":"transparent"};color:${tab===k?C.magenta:"#fff"};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">${l}</button>`).join("")}
       </div>
-    `)}
-    <div style="padding:0 15px">${tabContent}<div style="height:20px"></div></div>
-    ${nav()}`;
+    `) +
+    `<div style="padding:0 15px">${tabContent}<div style="height:20px"></div></div>` +
+    nav();
 }
 
 // ── PAGE: LOGIN ───────────────────────────────────────────────────────────────
@@ -1104,6 +1148,7 @@ function missionModalContent(mTab, m, brief, chef, eid) {
 
   if (mTab==="infos") {
     const isNew = !m?.id; // Only show duplication for brand new missions
+    const mEid = state._missionEid || m?._eid || "";
     // Merge draft (typed values) over saved data
     const d = state._missionDraft;
     const dateType = d.dateType ?? m?.dateType ?? "jour";
@@ -1121,6 +1166,9 @@ function missionModalContent(mTab, m, brief, chef, eid) {
 
     return (
       field("Titre *", `<input id="m-titre" type="text" value="${vTitre.replace(/"/g,"&quot;")}" placeholder="Titre de la mission" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
+      field("Événement *", `<select id="m-eid" style="${IS}" onchange="state._missionEid=this.value">` +
+      state.events.map(e => `<option value="${e.id}" ${mEid===e.id?"selected":""}>${e.hashtag} — ${e.nom}</option>`).join("") +
+      `</select>`) +
       field("Catégorie", `<select id="m-cat" style="${IS}">${CATEGORIES.slice(1).map(c=>`<option ${vCat===c?"selected":""}>${c}</option>`).join("")}</select>`) +
       field("Lieu *", `<input id="m-lieu" type="text" value="${vLieu.replace(/"/g,"&quot;")}" placeholder="Adresse précise" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
       `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:13px">` +
@@ -1262,6 +1310,29 @@ function renderModalOnly() {
 
 // ── GLOBAL SUBMIT HANDLERS ────────────────────────────────────────────────────
 window.navigate = navigate;
+
+// Global mission helpers that carry their own eid
+window.openMissionModalGlobal = (mJson) => {
+  const data = mJson ? JSON.parse(decodeURIComponent(mJson)) : {};
+  const eid = data.eid || state._adminEventFilter !== 'all' ? state._adminEventFilter : (state.events[0]?.id || "");
+  state._missionEid = data.eid || (state._adminEventFilter !== 'all' ? state._adminEventFilter : (state.events[0]?.id || ""));
+  state._missionDraft = {};
+  state._modalMissionTab = "infos";
+  state.modal = { type: "mission", data: { ...data, eid: state._missionEid } };
+  render();
+};
+
+window.deleteMissionGlobal = async (mid, eid) => {
+  if (!confirm("Supprimer cette mission ?")) return;
+  await deleteDoc(missionDoc(eid, mid));
+  showToast("🗑️ Mission supprimée.");
+};
+
+window.navigateToMission = (mid, eid) => {
+  state.currentEventId = eid;
+  state.missions = state.allMissions[eid] || [];
+  navigate('mission', { missionId: mid, eventId: eid });
+};
 window.openMissionModal = (mJson) => {
   const data = mJson ? JSON.parse(decodeURIComponent(mJson)) : {};
   data.eid = state.currentEventId;
@@ -1349,8 +1420,9 @@ window.submitLien = async (mid, lIdx) => {
 };
 
 window.submitMission = async (mid, eid, isDraft=false) => {
-  // Use state._missionEid as reliable fallback
-  const resolvedEid = (eid && eid !== "undefined" && eid !== "null") ? eid : (state._missionEid || state.currentEventId || "");
+  // Read eid from the event selector in the form (most reliable)
+  const formEid = document.getElementById("m-eid")?.value || "";
+  const resolvedEid = formEid || (eid && eid !== "undefined" && eid !== "null" ? eid : "") || state._missionEid || state.currentEventId || "";
   // Always save draft state first (in case we're on Brief or Chef tab)
   saveMissionDraftFromDOM();
   const d = state._missionDraft;
@@ -1483,10 +1555,25 @@ window.addCatRow = () => {
 
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+async function subscribeAllMissions() {
+  // Subscribe to missions of ALL events simultaneously
+  for (const ev of state.events) {
+    onSnapshot(missionsCol(ev.id), (snap) => {
+      state.allMissions[ev.id] = snap.docs.map(d => ({ id: d.id, _eid: ev.id, ...d.data() }));
+      // Also update state.missions if this is the current event
+      if (ev.id === state.currentEventId) {
+        state.missions = state.allMissions[ev.id];
+      }
+      render();
+    });
+  }
+}
+
 async function init() {
   await initFirestore();
   await loadCategories();
   await loadEvents();
+  await subscribeAllMissions();
   render();
 }
 init();
