@@ -895,9 +895,10 @@ function pageAdmin() {
                 ${m.statut==="brouillon"?`<span style="background:#f39c12;color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">BROUILLON</span>`:""}
               </div>
               <div style="display:flex;gap:5px;flex-shrink:0">
-                <button onclick="navigateToMission('${m.id}','${m._eid}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("arrow",13,C.gray)}</button>
-                <button onclick="openMissionModalGlobal('${encodeURIComponent(JSON.stringify({...m,eid:m._eid}))}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("edit",13,C.orangeVif)}</button>
-                <button onclick="deleteMissionGlobal('${m.id}','${m._eid}')" style="background:#fff0f0;border:none;border-radius:8px;padding:6px 8px;cursor:pointer">${icon("trash",13,C.red)}</button>
+                <button onclick="navigateToMission('${m.id}','${m._eid}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer" title="Voir">${icon("arrow",13,C.gray)}</button>
+                <button onclick="openMissionModalGlobal('${encodeURIComponent(JSON.stringify({...m,eid:m._eid}))}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer" title="Modifier">${icon("edit",13,C.orangeVif)}</button>
+                <button onclick="duplicateMission('${encodeURIComponent(JSON.stringify({...m,eid:m._eid}))}')" style="background:${C.grayLight};border:none;border-radius:8px;padding:6px 8px;cursor:pointer" title="Dupliquer">${icon("copy",13,"#8e44ad")}</button>
+                <button onclick="deleteMissionGlobal('${m.id}','${m._eid}')" style="background:#fff0f0;border:none;border-radius:8px;padding:6px 8px;cursor:pointer" title="Supprimer">${icon("trash",13,C.red)}</button>
               </div>
             </div>
             <h4 style="margin:0 0 5px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:${C.dark}">${m.titre}</h4>
@@ -1194,19 +1195,8 @@ function missionModalContent(mTab, m, brief, chef, eid) {
       `</div>` +
       field("Nb bénévoles", `<input id="m-nb" type="number" min="1" value="${vNb}" style="${IS}"/>`) +
       field("Vidéo tuto (YouTube embed)", `<input id="m-video" type="url" value="${vVideo.replace(/"/g,"&quot;")}" placeholder="https://www.youtube.com/embed/…" style="${IS}" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`) +
-      (isNew && state.events && state.events.length > 0 ? (
-        `<div style="background:${C.magenta}08;border:1px solid ${C.magenta}25;border-radius:12px;padding:13px;margin-bottom:13px">` +
-        `<div style="font-size:11px;font-weight:700;color:${C.dark};text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">📋 Dupliquer aussi vers</div>` +
-        `<p style="font-size:11px;color:${C.gray};margin:0 0 10px">La mission sera créée dans les événements cochés (modifiable ensuite individuellement).</p>` +
-        state.events.map(e => (
-          `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:${C.dark};cursor:pointer;margin-bottom:8px">` +
-          `<input type="checkbox" class="m-dup-event" value="${e.id}" ${e.id===eid?"checked":""} style="width:16px;height:16px;cursor:pointer"/>` +
-          `<span style="background:${e.couleur||C.magenta};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">${e.hashtag}</span>` +
-          ` ${e.nom}${e.id===eid?" (événement actuel)":""}` +
-          `</label>`
-        )).join("") +
-        `</div>`
-      ) : "") +
+      // Duplication supprimée - utiliser le bouton Dupliquer dans la liste admin
+
       `<div style="display:flex;gap:8px;margin-top:14px"><button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button><button onclick="submitMission('${m?.id||""}',state._missionEid,true)" style="flex:1;padding:12px;background:#fff;color:${C.gray};border:2px dashed #ccc;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">📝 Brouillon</button><button onclick="submitMission('${m?.id||""}',state._missionEid,false)" style="flex:2;padding:12px;background:linear-gradient(135deg,${C.magenta},${C.orangeVif});color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;cursor:pointer">💾 Enregistrer</button></div>`
     );
   }
@@ -1312,14 +1302,23 @@ function renderModalOnly() {
 window.navigate = navigate;
 
 // Global mission helpers that carry their own eid
-window.openMissionModalGlobal = (mJson) => {
-  const data = mJson ? JSON.parse(decodeURIComponent(mJson)) : {};
-  const eid = data.eid || state._adminEventFilter !== 'all' ? state._adminEventFilter : (state.events[0]?.id || "");
-  state._missionEid = data.eid || (state._adminEventFilter !== 'all' ? state._adminEventFilter : (state.events[0]?.id || ""));
+window.openMissionModalGlobal = (mJson, isDup=false) => {
+  const raw = mJson ? JSON.parse(decodeURIComponent(mJson)) : {};
+  // If duplicating: strip id so it saves as new mission
+  const data = isDup ? (({ id, _eid, _ev, ...rest }) => rest)(raw) : raw;
+  // Resolve eid: from data, then filter, then first event
+  const resolvedEid = data.eid || raw._eid ||
+    (state._adminEventFilter !== 'all' ? state._adminEventFilter : (state.events[0]?.id || ""));
+  state._missionEid = resolvedEid;
   state._missionDraft = {};
   state._modalMissionTab = "infos";
-  state.modal = { type: "mission", data: { ...data, eid: state._missionEid } };
+  state.modal = { type: "mission", data: { ...data, eid: resolvedEid } };
   render();
+};
+
+window.duplicateMission = (mJson) => {
+  window.openMissionModalGlobal(mJson, true);
+  showToast("📋 Remplissez le formulaire et enregistrez la copie !");
 };
 
 window.deleteMissionGlobal = async (mid, eid) => {
@@ -1468,16 +1467,7 @@ window.submitMission = async (mid, eid, isDraft=false) => {
   };
   if(mid) data.id=mid;
   await saveMission(data, isDraft, resolvedEid);
-  // Duplication uniquement pour les nouvelles missions (jamais pour les modifications)
-  if (!mid) {
-    const allDups = [...document.querySelectorAll(".m-dup-event:checked")];
-    const otherDups = allDups.filter(b => b.value !== resolvedEid);
-    for (const box of otherDups) {
-      const dupData = { ...data }; delete dupData.id;
-      await addDoc(missionsCol(box.value), { ...dupData, inscrits:[], commentaires:[], createdAt:serverTimestamp() });
-    }
-    if (otherDups.length > 0) showToast("✅ Dupliquée sur " + otherDups.length + " autre(s) événement(s) !");
-  }
+  // Duplication gérée via bouton Dupliquer dans la liste admin
 };
 
 window.submitEvent = async (existingId) => {
