@@ -548,7 +548,9 @@ function pageEvent() {
   const ev = currentEvent();
   if (!ev) return `<div style="padding:40px;text-align:center;color:${C.gray}">Événement introuvable.</div>`;
   const allVisible = isAdmin() ? state.missions : state.missions.filter(m=>m.statut!=="brouillon");
-  const filtered = state.filterCat === "Toutes" ? allVisible : allVisible.filter(m=>m.categorie===state.filterCat);
+  const filtered = state.filterCat === "Toutes" ? allVisible
+    : state.filterCat === "__pourvoir__" ? allVisible.filter(m => (m.inscrits||[]).length < (m.nbBenevoles||0))
+    : allVisible.filter(m => m.categorie === state.filterCat);
   const bg = `linear-gradient(135deg,${ev.couleur||C.magenta},${C.orange})`;
   const totalI = state.missions.reduce((s,m)=>s+(m.inscrits||[]).length,0);
   const totalB = state.missions.reduce((s,m)=>s+(m.nbBenevoles||0),0);
@@ -562,24 +564,11 @@ function pageEvent() {
       <div style="color:#fff;font-family:'Montserrat',sans-serif;font-weight:900;font-size:18px">${ev.hashtag}</div>
       <div style="color:rgba(255,255,255,.85);font-size:12px;margin-top:2px">${ev.lieu} · ${fmtDate(ev.date)}</div>
     `)}
-    <div style="position:relative;margin:0">
-      <div id="cat-scroll-bar" style="display:flex;gap:7px;overflow-x:auto;padding:12px 15px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch" onscroll="updateCatArrows()">
-        ${CATEGORIES.map(c=>`<button onclick="state.filterCat='${c}';render()" style="padding:6px 14px;border-radius:99px;border:2px solid ${state.filterCat===c?C.magenta:"#eee"};background:${state.filterCat===c?C.magenta:"#fff"};color:${state.filterCat===c?"#fff":C.dark};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">${c}</button>`).join("")}
-      </div>
-      <div id="cat-arrow-left" onclick="document.getElementById('cat-scroll-bar').scrollBy({left:-120,behavior:'smooth'})" style="display:none;position:absolute;left:0;top:50%;transform:translateY(-50%);background:linear-gradient(to right,#fff 60%,transparent);padding:8px 14px 8px 6px;cursor:pointer;font-size:16px;color:${C.dark};z-index:10;border:none">‹</div>
-      <div id="cat-arrow-right" onclick="document.getElementById('cat-scroll-bar').scrollBy({left:120,behavior:'smooth'})" style="display:none;position:absolute;right:0;top:50%;transform:translateY(-50%);background:linear-gradient(to left,#fff 60%,transparent);padding:8px 6px 8px 14px;cursor:pointer;font-size:16px;color:${C.dark};z-index:10;border:none">›</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px;padding:12px 15px 8px">
+      <button onclick="state.filterCat='Toutes';render()" style="padding:6px 14px;border-radius:99px;border:2px solid ${state.filterCat==='Toutes'?C.magenta:'#eee'};background:${state.filterCat==='Toutes'?C.magenta:'#fff'};color:${state.filterCat==='Toutes'?'#fff':C.dark};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">Toutes</button>
+      <button onclick="state.filterCat='__pourvoir__';render()" style="padding:6px 14px;border-radius:99px;border:2px solid ${state.filterCat==='__pourvoir__'?'#e67e22':'#eee'};background:${state.filterCat==='__pourvoir__'?'#e67e22':'#fff'};color:${state.filterCat==='__pourvoir__'?'#fff':C.dark};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">🔥 Missions à pourvoir</button>
+      ${CATEGORIES.slice(1).map(c=>`<button onclick="state.filterCat='${c}';render()" style="padding:6px 14px;border-radius:99px;border:2px solid ${state.filterCat===c?C.magenta:'#eee'};background:${state.filterCat===c?C.magenta:'#fff'};color:${state.filterCat===c?'#fff':C.dark};font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">${c}</button>`).join("")}
     </div>
-    <script>
-      function updateCatArrows() {
-        const el = document.getElementById("cat-scroll-bar");
-        if (!el) return;
-        const left = document.getElementById("cat-arrow-left");
-        const right = document.getElementById("cat-arrow-right");
-        if (left)  left.style.display  = el.scrollLeft > 5 ? "block" : "none";
-        if (right) right.style.display = el.scrollLeft < (el.scrollWidth - el.clientWidth - 5) ? "block" : "none";
-      }
-      setTimeout(() => updateCatArrows(), 100);
-    <\/script>
 
     <div style="padding:0 15px">
       <!-- Stats rapides -->
@@ -1085,7 +1074,10 @@ function renderModal() {
       ${field("Date", `<input id="ev-date" type="date" value="${e.date||""}" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none"/>`)}
       ${field("Lieu", `<input id="ev-lieu" type="text" value="${(e.lieu||"").replace(/"/g,'&quot;')}" placeholder="Parc, ville…" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       ${field("Couleur", `<input id="ev-couleur" type="color" value="${e.couleur||C.magenta}" style="width:60px;height:40px;border:2px solid #eee;border-radius:10px;cursor:pointer;padding:2px"/>`)}
-      ${btnPri("💾 Enregistrer",`submitEvent('${e.id||""}')`)}
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button>
+        ${btnPri("💾 Enregistrer",`submitEvent('${e.id||""}')`,false,"flex:2;padding:12px")}
+      </div>
     `);
   }
 
@@ -1097,7 +1089,10 @@ function renderModal() {
       ${field("Date", `<input id="cl-date" type="date" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none"/>`)}
       ${field("Lieu", `<input id="cl-lieu" type="text" placeholder="Parc, ville…" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
       ${field("Couleur", `<input id="cl-couleur" type="color" value="${C.orange}" style="width:60px;height:40px;border:2px solid #eee;border-radius:10px;cursor:pointer;padding:2px"/>`)}
-      ${btnPri("📋 Cloner l'événement",`submitClone('${data.sourceId}')`)}
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button onclick="closeModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;cursor:pointer">✕ Annuler</button>
+        ${btnPri("📋 Cloner",`submitClone('${data.sourceId}')`,false,"flex:2;padding:12px")}
+      </div>
     `);
   }
 
