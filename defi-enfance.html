@@ -1023,15 +1023,6 @@ function renderModal() {
       ${btnPri("💾 Enregistrer",`submitUser('${u.uid||""}')`)}
     `);
   }
-    const u = data.uid ? data : {};
-    return modal(u.uid?"✏️ Modifier l'utilisateur":"➕ Nouvel utilisateur",`
-      ${field("Nom complet *", `<input id="u-nom" type="text" value="${(u.nom||"").replace(/"/g,'&quot;')}" placeholder="Prénom Nom" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
-      ${field("Email *", `<input id="u-email" type="email" value="${(u.email||"").replace(/"/g,'&quot;')}" placeholder="email@example.fr" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none" onfocus="this.style.borderColor='${C.magenta}'" onblur="this.style.borderColor='#eee'"/>`)}
-      ${field("Rôle", `<select id="u-role" style="width:100%;padding:11px 13px;border:2px solid #eee;border-radius:10px;font-family:'Poppins',sans-serif;font-size:14px;outline:none"><option value="superAdmin" ${u.role==="superAdmin"?"selected":""}>👑 Super Administrateur</option><option value="admin" ${u.role==="admin"||!u.role?"selected":""}>⚙️ Administrateur</option></select>`)}
-      <p style="font-size:11px;color:${C.gray};margin-bottom:12px">⚠️ Pour modifier le mot de passe, utilisez la console Firebase Authentication.</p>
-      ${btnPri("💾 Enregistrer",`submitUser('${u.uid||""}')`)}
-    `);
-  }
 
 
   if (type==="categories") {
